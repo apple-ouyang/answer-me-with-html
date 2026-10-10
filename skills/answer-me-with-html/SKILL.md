@@ -64,6 +64,17 @@ If the context contains the `[answer-me-with-html always-on]` reminder (the user
 - Order: render the page first, then write the text reply. The reply is the last thing in the turn, with the page link on its last line (see step 5). Do not write the reply and then call `am render`.
 - Produce no page for small talk, one or two sentences with no conclusion, pure command output, or when the user asks for plain text.
 
+## 2a. 本地规则：页面放哪、一主题一页（优先于下文）
+
+本节是本机 fork 的增量，与下文冲突时以本节为准。
+
+1. **页面写进当前项目，不写 `~/.answer-me-with-html/pages/`。** 每次 `render` 都必须带 `--out`。同主题已有 Markdown 文档时，页面放在文档旁边、同名换 `.html` 后缀，例如 `docs/个人财务/CHUNWU海外收付与每月欧元路径.html`。没有文档时写 `<项目根>/docs/html/<主题>.html`，主题名用中文短语，不带日期和时间戳。项目没有 `docs/` 时先问用户放哪，不要回落到默认目录。
+2. **一个主题只维护一页。** 渲染前先 `rg --files <项目根>/docs -g '*.html'` 看有没有同主题的页。有就更新这一页，不新建。
+3. **追问并进同一页。** 同一主题下的后续问题、补充数据和纠错，改成这页里新增或改写的面板，不为每个问题单独出页。只改一两个面板用 `am patch <页> --panel "<标题>"`；结构变了就从页里的 `#am-source` 取出原稿，改完用同一个 `--out` 整页重渲染覆盖。
+4. **同主题已有 Markdown 文档时，两者分工。** 文档放文字和出处，页面放图和费率汇总；页面路径写进文档开头，文档改了同步改页面。
+5. **不要每轮都出页。** 一个问题能用两三句话答清，就直接文字回答，再把结论补进已有页面。只有新主题、且满足第 1 节条件时，才新建一页。
+6. 回复里给页面的绝对路径。
+
 ## 2. Workflow (one Bash call)
 
 The CLI is bundled in this skill's directory: `scripts/am.mjs`, a single file with no dependencies to install; it needs only Node.js 20+. If `node` is not found or is older than v20, tell the user, show them the exact command to install the Node.js LTS (macOS `brew install node`, Windows `winget install OpenJS.NodeJS.LTS`, otherwise nvm, which adds lines to the shell profile), and run it only after they agree, then check `node --version` again. If they say no or it still fails, stop and tell them. Below, `am` always means:
@@ -82,7 +93,7 @@ Keep the default output; it needs no flag. If the session cannot write to `~/.an
 3. Render in one go with a heredoc:
 
 ````bash
-node "${CLAUDE_SKILL_DIR}/scripts/am.mjs" render - <<'AM_EOF'
+node "${CLAUDE_SKILL_DIR}/scripts/am.mjs" render --no-open --out "<项目根>/docs/html/<主题>.html" - <<'AM_EOF'
 ---
 title: Title
 ---
