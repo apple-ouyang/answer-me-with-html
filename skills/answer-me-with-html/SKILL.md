@@ -9,10 +9,9 @@ description: >-
   structure, state machine, lifecycle, history); any comparison, trade-off or decision with pros and
   cons; any diagnosis, review or investigation, especially with several causes or findings to rank;
   any answer with a table, a numbered or ranked list, steps, branches or several sections; or when the
-  user says "I don't get it / draw it / explain visually / 讲讲原理 / 没看懂 / 画个图". When in doubt, use it: a
-  page is quick and cheap to make. Also for explainer videos ("make a video", "做个视频") and for changing
-  its settings. Skip only for small talk, a trivial one-line answer, or when the user asks for plain
-  text.
+  user says "I don't get it / draw it / explain visually / 讲讲原理 / 没看懂 / 画个图". Also for explainer
+  videos ("make a video", "做个视频") and for changing its settings. Skip for small talk, a short
+  follow-up question, a trivial one-line answer, or when the user asks for plain text.
 ---
 
 # Answer me with HTML: answer a complex question with one HTML page
@@ -20,6 +19,23 @@ description: >-
 You write only the **content draft** (extended Markdown). The `am` CLI does all layout, colours, dark mode and diagram coordinates. **Do not hand-write HTML / CSS / SVG.**
 
 Reply to the user, and write the draft, in the user's language.
+
+## 本地规则：页面放项目目录，一个主题只维护一页
+
+这一节是本地 fork 的差异，优先于下文的默认落点和「一问一页」写法。
+
+1. **落点**：每次 `render` 都带 `--out <项目内路径>`，不写进 `~/.answer-me-with-html/pages/`。
+   - 主题已有 Markdown 文档时，HTML 放在它旁边，同名，扩展名改成 `.html`。例：`docs/个人财务/海外收付.md` → `docs/个人财务/海外收付.html`。
+   - 没有对应文档时，放 `docs/reports/<YYYY-MM-DD>-<主题>.html`。
+   - 当前目录不是项目，或项目没有 `docs/`：先问用户放哪，不要退回默认目录。
+2. **一个主题一页**：同一会话里围绕同一主题的追问、修正、补数，都改同一页，不新开页。
+   - 先看这一主题是否已有页面（会话里给过的路径、文档里的链接、`docs/` 下同名 `.html`）。有就更新它。
+   - 只改一两个面板：用 `am patch <页面> --panel "<标题>"`。
+   - 结构要大改：用页面里的 `#am-source` 作底稿，整体改写后用同一个 `--out` 路径重新 `render`，覆盖原文件。不要加时间戳，不要另存新页。
+   - 用户在一轮里问了几个相关问题：合成一页里的几个面板，不要一题一页。
+3. **只有换了主题才开新页**。拿不准是不是同一主题时，并进已有页面。
+4. 页面和对应 Markdown 文档讲同一件事时，文档顶部写一次页面的相对路径。之后只改内容，不改路径。
+5. 回复里只给这一页的路径。不要在每一轮都重复贴旧页面，也不要在 `~/.answer-me-with-html/pages/` 留副本。
 
 ## 0. When the user wants to change settings
 
@@ -80,7 +96,7 @@ AM_EOF
    - `✗ L<line> [component] …` + `Correct example:`: fix that line following the example, then render again (no page was written).
    - `code n warnings`: a code block is longer than 40 lines, or a diff hunk has a different number of lines than its `@@` header says. Cut the block or fix the header to the lines that make the point and render again, or keep it if every line matters.
    - `STE n warnings`: rewrite the flagged lines as suggested, then render again. Retry at most 2 rounds; if warnings remain, keep the last page and say so.
-   - Every time you render again after a `✓`, add `--replace <path from the last ✓ line>`. The CLI deletes that page once the new one is written, so one answer leaves one page.
+   - Every time you render again after a `✓`, reuse the same `--out <path>` so the file is overwritten in place (local rule above). Use `--replace` only if a page was written without `--out`.
    - `! Cleanup hint: …` or `! Update hint: …`: pass it on to the user in one sentence at the end of the reply, and ask whether to clean up / update. **Do not run am clean or the update command yourself**; wait until the user agrees. The CLI throttles these: the cleanup hint appears at most once every 7 days, the update hint at most once every 3 days.
 5. Reply in the terminal with only 2–3 lines: one core conclusion + the page link. Do not paste the draft or the HTML back into the terminal. Write this reply after the render, as the last step of the turn: render the page first, then reply. No tool call comes after the reply.
    If the render output has a `link:` line, the user runs `am serve`: use that URL as the page link instead, with the URL as the label too, and skip the `file://` link below. Never start `am serve` yourself; only the user starts it.
