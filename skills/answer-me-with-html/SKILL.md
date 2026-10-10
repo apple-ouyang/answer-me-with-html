@@ -22,20 +22,21 @@ Reply to the user, and write the draft, in the user's language.
 
 ## 本地规则：页面放项目目录，一个主题只维护一页
 
-这一节是本地 fork 的差异，优先于下文的默认落点和「一问一页」写法。
+这一节是本地 fork 的差异。和下文冲突时，以本节为准。
 
 1. **落点**：每次 `render` 都带 `--out <项目内路径>`，不写进 `~/.answer-me-with-html/pages/`。
    - 主题已有 Markdown 文档时，HTML 放在它旁边，同名，扩展名改成 `.html`。例：`docs/个人财务/海外收付.md` → `docs/个人财务/海外收付.html`。
-   - 没有对应文档时，放 `docs/reports/<YYYY-MM-DD>-<主题>.html`。
+   - 没有对应文档时，放 `<项目根>/docs/reports/<主题>.html`。主题用中文短语，不带日期和时间戳，这样以后能按同一路径找回。
    - 当前目录不是项目，或项目没有 `docs/`：先问用户放哪，不要退回默认目录。
-2. **一个主题一页**：同一会话里围绕同一主题的追问、修正、补数，都改同一页，不新开页。
-   - 先看这一主题是否已有页面（会话里给过的路径、文档里的链接、`docs/` 下同名 `.html`）。有就更新它。
-   - 只改一两个面板：用 `am patch <页面> --panel "<标题>"`。
-   - 结构要大改：用页面里的 `#am-source` 作底稿，整体改写后用同一个 `--out` 路径重新 `render`，覆盖原文件。不要加时间戳，不要另存新页。
-   - 用户在一轮里问了几个相关问题：合成一页里的几个面板，不要一题一页。
+2. **一个主题一页**：同一主题的追问、修正、补数，都改同一页，不新开页。
+   - 渲染前先找已有页面：会话里给过的路径、文档开头的链接、`rg --files <项目根>/docs -g '*.html'`。找到就更新它。
+   - 只改已有的一两个面板：`am patch <页面> --panel "<标题>"`。
+   - 新增面板，或结构要大改：`patch` 加不了新面板。从页面的 `#am-source` 取出原稿，改完用同一个 `--out` 重新 `render`，覆盖原文件。
+   - 用户一轮里问了几个相关问题：合成一页里的几个面板，不要一题一页。
 3. **只有换了主题才开新页**。拿不准是不是同一主题时，并进已有页面。
-4. 页面和对应 Markdown 文档讲同一件事时，文档顶部写一次页面的相对路径。之后只改内容，不改路径。
-5. 回复里只给这一页的路径。不要在每一轮都重复贴旧页面，也不要在 `~/.answer-me-with-html/pages/` 留副本。
+4. **不要每轮都出页**。两三句话能答清的问题，直接文字回答，再把结论补进已有页面。always-on 模式也一样：「有结论就出页」在这里指更新已有页面，不是新建一页。
+5. **和 Markdown 文档分工**：文档放文字和出处，页面放图和汇总。文档开头写一次页面的相对路径；文档改了，同步改页面。
+6. 回复里只给这一页的**绝对路径**，写法按第 2 节第 5 步的 `file://` 链接。不要重复贴旧页面，也不要在 `~/.answer-me-with-html/pages/` 留副本。
 
 ## 0. When the user wants to change settings
 
@@ -72,17 +73,6 @@ If the context contains the `[answer-me-with-html always-on]` reminder (the user
 - The internal-report rule of step 1 applies here too: a delegated report that inherits the always-on rule renders no page, unless the delegated task explicitly asks for one.
 - Produce no page for small talk, one or two sentences with no conclusion, pure command output, or when the user asks for plain text.
 
-## 2a. 本地规则：页面放哪、一主题一页（优先于下文）
-
-本节是本机 fork 的增量，与下文冲突时以本节为准。
-
-1. **页面写进当前项目，不写 `~/.answer-me-with-html/pages/`。** 每次 `render` 都必须带 `--out`。同主题已有 Markdown 文档时，页面放在文档旁边、同名换 `.html` 后缀，例如 `docs/个人财务/CHUNWU海外收付与每月欧元路径.html`。没有文档时写 `<项目根>/docs/html/<主题>.html`，主题名用中文短语，不带日期和时间戳。项目没有 `docs/` 时先问用户放哪，不要回落到默认目录。
-2. **一个主题只维护一页。** 渲染前先 `rg --files <项目根>/docs -g '*.html'` 看有没有同主题的页。有就更新这一页，不新建。
-3. **追问并进同一页。** 同一主题下的后续问题、补充数据和纠错，改成这页里新增或改写的面板，不为每个问题单独出页。只改一两个面板用 `am patch <页> --panel "<标题>"`；结构变了就从页里的 `#am-source` 取出原稿，改完用同一个 `--out` 整页重渲染覆盖。
-4. **同主题已有 Markdown 文档时，两者分工。** 文档放文字和出处，页面放图和费率汇总；页面路径写进文档开头，文档改了同步改页面。
-5. **不要每轮都出页。** 一个问题能用两三句话答清，就直接文字回答，再把结论补进已有页面。只有新主题、且满足第 1 节条件时，才新建一页。
-6. 回复里给页面的绝对路径。
-
 ## 2. Workflow (one Bash call)
 
 The CLI is bundled in this skill's directory: `scripts/am.mjs`, a single file with no dependencies to install; it needs only Node.js 20+. If `node` is not found or is older than v20, tell the user, show them the exact command to install the Node.js LTS (macOS `brew install node`, Windows `winget install OpenJS.NodeJS.LTS`, otherwise nvm, which adds lines to the shell profile), and run it only after they agree, then check `node --version` again. If they say no or it still fails, stop and tell them. Below, `am` always means:
@@ -101,7 +91,7 @@ Keep the default output; it needs no flag. If the session cannot write to `~/.an
 3. Render in one go with a heredoc:
 
 ````bash
-node "${CLAUDE_SKILL_DIR}/scripts/am.mjs" render --no-open --out "<项目根>/docs/html/<主题>.html" - <<'AM_EOF'
+node "${CLAUDE_SKILL_DIR}/scripts/am.mjs" render --no-open --out "<项目根>/docs/reports/<主题>.html" - <<'AM_EOF'
 ---
 title: Title
 ---
