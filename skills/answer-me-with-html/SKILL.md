@@ -28,11 +28,15 @@ Reply to the user, and write the draft, in the user's language.
    - 主题已有 Markdown 文档时，HTML 放在它旁边，同名，扩展名改成 `.html`。例：`docs/个人财务/海外收付.md` → `docs/个人财务/海外收付.html`。
    - 没有对应文档时，放 `<项目根>/docs/reports/<主题>.html`。主题用中文短语，不带日期和时间戳，这样以后能按同一路径找回。
    - 当前目录不是项目，或项目没有 `docs/`：先问用户放哪，不要退回默认目录。
-2. **一个主题一页**：同一主题的追问、修正、补数，都改同一页，不新开页。
+2. **一个主题一页，更新时整页留着**：同一主题的追问、修正、补数，都改同一页，不新开页。读者要的是这一主题到目前为止的整页。用最后一问重写一版短稿，旧面板、表、图和数字会消失，页面就会一轮比一轮短。
    - 渲染前先找已有页面：会话里给过的路径、文档开头的链接、`rg --files <项目根>/docs -g '*.html'`。找到就更新它。
    - 只改已有的一两个面板：`am patch <页面> --panel "<标题>"`。
-   - 新增面板，或结构要大改：`patch` 加不了新面板。从页面的 `#am-source` 取出原稿，改完用同一个 `--out` 重新 `render`，覆盖原文件。
-   - 用户一轮里问了几个相关问题：合成一页里的几个面板，不要一题一页。
+   - 要加面板或改结构：`patch` 加不了新面板。从该页 `#am-source` 取出整份原稿。新稿留下每一个 `##` 面板、表、图、数字和 `ask`。新事实加一个面板或加一行。改措辞只动已经放着这个事实的那一面板。用同一个 `--out` 覆盖原文件。
+   - 渲染前对一下旧稿和新稿的 `##` 标题，以及 `flow`、`chart`、表、`ask`、`callout`。新稿少了哪一块，先补回去再渲染。
+   - 删掉一块，只在用户点名要删那一块时。数字写错了，改正在同一面板里。
+   - 新面板加在末尾，或紧挨着它解释的那一面板，其余面板保持原有顺序。
+   - 下文「超过 8 个面板就拆页或删面板」、always-on 的「2–4 个面板」、以及「一个事实只说一次」，都不作为删旧面板的理由。已有页面可以超过 8 个面板。导语用一句话指向旧面板，面板本身留着。
+   - 用户一轮里问了几个相关问题：加进这一页，不要一题一页。
 3. **只有换了主题才开新页**。拿不准是不是同一主题时，并进已有页面。
 4. **不要每轮都出页**。两三句话能答清的问题，直接文字回答，再把结论补进已有页面。always-on 模式也一样：「有结论就出页」在这里指更新已有页面，不是新建一页。
 5. **和 Markdown 文档分工**：文档放文字和出处，页面放图和汇总。文档开头写一次页面的相对路径；文档改了，同步改页面。
@@ -109,7 +113,7 @@ AM_EOF
    If you have a `present` tool (DeepSeek Harness), call it with the absolute path from the `✓` line before you reply, so the user can open the page from a card in the app. Still end the reply with the link.
    If you have an in-app browser tool (such as `open_in_codex` in OpenAI Codex), the render output has a `link:` line, and `am config get open` is not `off`, call that tool with the link (`open_in_codex`: `target: { type: "browser", url: "<link>" }`) so the user sees the page in the app's browser panel. Still end the reply with the link.
 
-When a page already exists and only one panel needs to change, do not rewrite the whole page. Take the source draft from the HTML's `#am-source`, replace only the matching `##` section, and overwrite the page in place:
+When a page already exists and only one panel needs to change, do not rewrite the whole page. Take the source draft from the HTML's `#am-source`, replace only the matching `##` section, and overwrite the page in place. A full re-render of an existing page also starts from that `#am-source` and keeps every panel, table, diagram, number and ask (本地规则第 2 条). A shorter draft that only answers the latest question is not an update.
 
 ````bash
 node "${CLAUDE_SKILL_DIR}/scripts/am.mjs" patch page.html --panel "Panel title" <<'AM_EOF'
