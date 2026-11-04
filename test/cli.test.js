@@ -176,6 +176,32 @@ test('cli render: a second default page in the same second gets -2 and keeps bot
   assert.match(readFileSync(first, 'utf8'), /First body\./);
 });
 
+test('cli render: an existing page opens once; a later render or patch does not open another tab', async () => {
+  const opened = [];
+  const home = join(dir, 'open-once-home');
+  const page = join(dir, 'open-once.html');
+  const call = (args, stdin) => main(args, {
+    stdout: sink().stream, stderr: sink().stream, stdin: Readable.from([stdin]),
+    env: { AM_HOME: home, AM_NO_UPDATE_CHECK: '1' }, cwd: dir, open: (f) => opened.push(f),
+  });
+  assert.equal(await call(['render', '-', '-o', page], GOOD), 0);
+  assert.deepEqual(opened, [page]);
+  const again = sink();
+  const code = await main(['render', '-', '-o', page], {
+    stdout: again.stream, stderr: sink().stream, stdin: Readable.from([GOOD]),
+    env: { AM_HOME: home, AM_NO_UPDATE_CHECK: '1' }, cwd: dir, open: (f) => opened.push(f),
+  });
+  assert.equal(code, 0, again.text);
+  assert.equal(opened.length, 1, 'a second render of the same file does not open');
+  assert.match(again.text, /Not opened again; this page already exists/);
+  assert.equal(await call(['render', '-', '-o', page, '--open'], GOOD), 0);
+  assert.equal(opened.length, 2, '--open forces another tab');
+  assert.equal(await call(['patch', page, '--panel', '流程'], '## A 流程\n改过。\n'), 0);
+  assert.equal(opened.length, 2, 'patch does not open');
+  assert.equal(await call(['patch', page, '--panel', '流程', '--open'], '## A 流程\n再改。\n'), 0);
+  assert.equal(opened.length, 3, 'patch --open does open');
+});
+
 test('cli video: the summary line names the theme', async () => {
   const r = await run(['video', '-', '--voice', 'off', '--theme', 'shadcn'], { stdin: '---\ntitle: V\n---\n## A\n> 一句。\n' });
   assert.equal(r.code, 0, r.err);
@@ -633,6 +659,8 @@ test('shouldOpen: --no-open > AM_NO_OPEN > config open; --open forces opening', 
   assert.equal(shouldOpen({}, { AM_NO_OPEN: '0' }, { open: true }), true, 'AM_NO_OPEN=0 does not count as off');
   assert.equal(shouldOpen({}, { CI: 'true' }, { open: true }), false);
   assert.equal(shouldOpen({ open: true }, { AM_NO_OPEN: '1' }, { open: false }), true);
+  assert.equal(shouldOpen({}, {}, { open: true }, { already: true }), false, 'an existing file does not open again');
+  assert.equal(shouldOpen({ open: true }, {}, { open: false }, { already: true }), true, '--open still opens an existing file');
 });
 
 test('cli patch: a fake #am-source in the body must not overwrite the page', async () => {

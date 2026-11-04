@@ -64,6 +64,7 @@ Usage:
 - Output goes to ~/.answer-me-with-html/pages/ by default (change it with the AM_HOME environment variable).
 - A page with STE or code warnings does not open. Fix the draft and render again with --replace <page>: the earlier page is deleted once the new one is written.
 - Set auto-open, the default theme and more with am config; --open / --no-open apply to this run only.
+  A page file that already exists does not open again. The first write opens once. Pass --open to open that file again.
 - am patch reads the source draft from the page's hidden #am-source, changes only the ## section that --panel names, and writes the page back to the same path.`;
 
 const FORMAT = `Draft format (extended Markdown)
@@ -330,12 +331,14 @@ export function oldNodeHint(version = process.version) {
   return `Answer me with HTML needs Node.js 20 or newer (found ${version}). Update Node.js: https://nodejs.org/`;
 }
 
-// Whether to open automatically: --open forces it > --no-open > AM_NO_OPEN (not 0) > CI environment > config open.
-export function shouldOpen(opts, env, config) {
+// Whether to open automatically: --open forces it > --no-open > AM_NO_OPEN (not 0) > CI environment > an output file that already exists > config open.
+// The first write of a path may open one tab. A later render or patch of that same file does not open another tab unless --open is set.
+export function shouldOpen(opts, env, config, extra = {}) {
   if (opts.open) return true;
   if (opts['no-open']) return false;
   if (env.AM_NO_OPEN && env.AM_NO_OPEN !== '0') return false;
   if (env.CI) return false;
+  if (extra.already) return false;
   return config.open !== false;
 }
 
@@ -358,16 +361,19 @@ async function cmdRender(src, opts, ctx, baseDir, from) {
   }
   const file = outputPath('pages', nameSource(result.meta), opts, ctx, pages);
   if (!file) return 2;
+  // Check before the write. After emit the file exists either way, and a second tab would open on every update.
+  const already = existsSync(file);
   const written = emit(result, file, ctx, { fallback: opts.out ? undefined : 'pages', pages });
   if (!written) return 1;
   if (opts.out && !extname(file)) print('! -o names a file without an extension; use .html for an HTML page');
   // Delete the earlier attempt only now: a render that fails above keeps it.
   if (replaced && replaced !== resolve(written)) removeEarlier(replaced, ctx);
   keepDraft(result, src, from, ctx);
-  // A page with STE, code or math warnings is likely to be rendered again, so it opens only when --open asks for it.
-  const held = !opts.open && hasRetryWarnings(result) && shouldOpen(opts, ctx.env, config.values);
+  // A new page with STE, code or math warnings is likely to be rendered again, so it opens only when --open asks for it.
+  // An existing page is not opened again either way (shouldOpen sees already).
+  const held = !already && !opts.open && hasRetryWarnings(result) && shouldOpen(opts, ctx.env, config.values);
   if (held) print(`  Not opened because of the warnings; to render again, add --replace ${written}`);
-  return finish(written, held ? { ...opts, 'no-open': true } : opts, config, ctx);
+  return finish(written, held ? { ...opts, 'no-open': true } : opts, config, ctx, { already });
 }
 
 // The new-version button for the page, from the version the background check last saw (src/update.js).
@@ -638,7 +644,8 @@ async function cmdPatch(htmlArg, fromArg, opts, ctx) {
     return reportError(e, fail);
   }
   if (!emit(result, file, ctx, { note: video ? ' (an MP4 or WebM with the same name is not updated; run am video --mp4 or --webm again if you need it)' : '', inPlace: true, pages })) return 1;
-  return finish(file, opts, config, ctx);
+  // patch always rewrites a page that already exists, so it does not open another tab unless --open is set.
+  return finish(file, opts, config, ctx, { already: true });
 }
 
 async function cmdExport(arg, opts, ctx) {
@@ -699,6 +706,7 @@ async function cmdVideo(src, opts, ctx, from) {
   }
   file ??= outputPath('videos', nameSource(result.meta), opts, ctx);
   if (!file) return 2;
+  const already = existsSync(file);
   const written = emit(result, file, ctx, { fallback: opts.out ? undefined : 'videos' });
   if (!written) return 1;
   if (opts.out && !extname(file)) print('! -o names a file without an extension; use .html for an HTML page');
@@ -706,7 +714,7 @@ async function cmdVideo(src, opts, ctx, from) {
   for (const format of ['mp4', 'webm']) {
     if (opts[format] && !(await exportVideo(written, result.wav, format, ctx))) return 1;
   }
-  return finish(written, opts, config, ctx);
+  return finish(written, opts, config, ctx, { already });
 }
 
 function validVoice(voice, fail) {
@@ -966,10 +974,16 @@ function summaryLine(result) {
 const count = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
 // Wrap-up after a successful render: print maintenance notices, open the browser per config. io.open can inject the opener.
-function finish(file, opts, config, ctx) {
+// extra.already: this path existed before the write. It was opened on the first write, so this run does not open another tab.
+function finish(file, opts, config, ctx, extra = {}) {
   printHints(config, ctx);
-  if (shouldOpen(opts, ctx.env, config.values)) (ctx.io.open ?? openFile)(file);
+  openWritten(file, opts, config, ctx, extra);
   return 0;
+}
+
+function openWritten(file, opts, config, ctx, extra = {}) {
+  if (shouldOpen(opts, ctx.env, config.values, extra)) (ctx.io.open ?? openFile)(file);
+  else if (extra.already && shouldOpen(opts, ctx.env, config.values)) ctx.print('  Not opened again; this page already exists. Pass --open to open it.');
 }
 
 // Notices attached after a successful render (cleanup, update), for the Agent, which asks the user.
@@ -1196,11 +1210,12 @@ function cmdTheme(action, target, opts, ctx) {
   const files = ['light', 'dark'].map((mode) => {
     const result = renderDoc(specimenDraft(name, mode), { theme: name, mode, style: 'off' }, {}, { themes, colophon: config.values.colophon });
     const file = outputPath('pages', `theme-${name}-${mode}`, {}, ctx, pages);
+    const already = existsSync(file);
     writePage(file, result.html, env, pages);
     print(`✓ ${file}`);
-    return file;
+    return { file, already };
   });
-  if (shouldOpen(opts, env, config.values)) files.forEach((f) => (io.open ?? openFile)(f));
+  for (const { file, already } of files) openWritten(file, opts, config, { env, io, print }, { already });
   return 0;
 }
 

@@ -41,6 +41,8 @@ Reply to the user, and write the draft, in the user's language.
 4. **不要每轮都出页**。两三句话能答清的问题，直接文字回答，再把结论补进已有页面。always-on 模式也一样：「有结论就出页」在这里指更新已有页面，不是新建一页。
 5. **和 Markdown 文档分工**：文档放文字和出处，页面放图和汇总。文档开头写一次页面的相对路径；文档改了，同步改页面。
 6. 回复里只给这一页的**绝对路径**，写法按第 2 节第 5 步的 `file://` 链接。不要重复贴旧页面，也不要在 `~/.answer-me-with-html/pages/` 留副本。
+7. **同一页只打开一次浏览器。** 这个路径还没有 html 时，第一次 `render` 不要加 `--no-open`，让 CLI 打开一次。路径上已经有 html 时，覆盖或 `patch` 都不要再开标签：CLI 发现文件已存在就不会再打开，就算没写 `--no-open` 也一样。不要自己执行 `open`，也不要调用应用内浏览器。用户明确说再打开时，才加 `--open`。
+   always-on 写的「每次都加 `--no-open`」在这里不适用。新页第一次要打开。已有页不要打开。
 
 ## 0. When the user wants to change settings
 
@@ -72,7 +74,7 @@ If the context contains the `[answer-me-with-html always-on]` reminder (the user
 - Whenever this turn gives a conclusion, summary, plan, comparison, review or explanation, attach a page.
 - Do not skip it because "the answer is short". If there is a conclusion, produce a page.
 - For everyday conclusions use a small page with 2–4 panels: one callout with the conclusion, plus one table or one diagram. Do not add panels just to fill space.
-- Render with `--no-open`, so no browser window interrupts the user. The user opens the page by clicking the path at the end of the reply.
+- A new html path opens once. Do not pass `--no-open` on that first render. If that file already exists, render or patch it and do not open another tab: the CLI skips the browser, and you do not run `open` or an in-app browser. Pass `--open` only when the user asks to open it again. The user can also click the path at the end of the reply.
 - Order: render the page first, then write the text reply. The reply is the last thing in the turn, with the page link on its last line (see step 5). Do not write the reply and then call `am render`. The one call that may come after the reply is the choice tool that puts the page's asks to the user, when your host can ask questions: write the reply first, so the user holds the link before answering (see step 5).
 - The internal-report rule of step 1 applies here too: a delegated report that inherits the always-on rule renders no page, unless the delegated task explicitly asks for one.
 - Produce no page for small talk, one or two sentences with no conclusion, pure command output, or when the user asks for plain text.
@@ -97,7 +99,7 @@ Keep the default output; it needs no flag. If the session cannot write to `~/.an
 3. Render in one go with a heredoc:
 
 ````bash
-node "${CLAUDE_SKILL_DIR}/scripts/am.mjs" render --no-open --out "<项目根>/docs/reports/<主题>.html" - <<'AM_EOF'
+node "${CLAUDE_SKILL_DIR}/scripts/am.mjs" render --out "<项目根>/docs/reports/<主题>.html" - <<'AM_EOF'
 ---
 title: Title
 ---
@@ -109,7 +111,7 @@ AM_EOF
 ````
 
 4. Read the output:
-   - `✓ <path>`: success. Whether the browser opens automatically depends on the user's settings (`am config`); `--no-open` affects only this run. A page with STE or code warnings never opens automatically.
+   - `✓ <path>`: success. A new file opens once. A file that already exists does not open again unless this run passes `--open`. `--no-open` skips the open for this run. A page with STE or code warnings never opens automatically.
    - `✗ L<line> …` + `Correct example:`: no page was written. The CLI lists every error of the draft at once, in line order (`✗ n errors in the draft`). Read all of them, fix each flagged line following its example, then render again.
    - `  draft: <path>`: the CLI saved your stdin draft there, and every `L<line>` in the output matches that file. Change only the flagged lines in that file with your file-edit tool; do not send a new heredoc. Then run `am render <path>`; when a page was written, add `--replace` or reuse `-o` as the rule on rendering again below says. The CLI deletes the saved draft once it renders with no warnings. A draft you passed as a file path is not copied: edit that file.
    - `code n warnings`: a code block is longer than 40 lines, or a diff hunk has a different number of lines than its `@@` header says. Cut the block or fix the header to the lines that make the point and render again, or keep it if every line matters.
@@ -121,7 +123,7 @@ AM_EOF
    Otherwise, in DeepSeek Harness, write a Markdown link directly to the absolute path from the `✓` line, with the path as the label too: `[C:/Users/Name/My Pages/page.html](<C:/Users/Name/My Pages/page.html>)` on Windows or `[/abs/path.html](</abs/path.html>)` on macOS/Linux. Use forward slashes on Windows and angle brackets around the destination so spaces work. These path links open the Document Preview panel.
    In other hosts, write the page link as a Markdown link to a `file://` URL, with the URL as the label too: `[file:///abs/path.html](file:///abs/path.html)`. Take the absolute path from the `✓` line and add `file://` in front; do not percent-encode it. GUI hosts (Codex, Antigravity) render this as a clickable link, and a terminal still shows the full URL.
    If you have a `present` tool (DeepSeek Harness), call it with the absolute path from the `✓` line before you reply, so the user can open the page from a card in the app. Still end the reply with the link.
-   If you have an in-app browser tool (such as `open_in_codex` in OpenAI Codex), the render output has a `link:` line, and `am config get open` is not `off`, call that tool with the link (`open_in_codex`: `target: { type: "browser", url: "<link>" }`) so the user sees the page in the app's browser panel. Still end the reply with the link.
+   Do not call an in-app browser, and do not run `open`, when the html file already existed. The CLI opens a new file once. Call an in-app browser only for a new page when the CLI did not open it (the render output has a `link:` line, you have a tool such as `open_in_codex`, and `am config get open` is not `off`). Still end the reply with the link.
 
 When a page already exists and only one panel needs to change, do not rewrite the whole page. Take the source draft from the HTML's `#am-source`, replace only the matching `##` section, and overwrite the page in place. A full re-render of an existing page also starts from that `#am-source` and keeps every panel, table, diagram, number and ask (本地规则第 2 条). A shorter draft that only answers the latest question is not an update.
 
