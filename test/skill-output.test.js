@@ -8,7 +8,7 @@ const workflow = skill.split('## 2. Workflow (one Bash call)')[1]?.split('## 3. 
 
 test('skill: keep the default output, fall back to the temporary folder, and use -o only when asked or refused', () => {
   assert.ok(workflow, 'workflow section exists');
-  const firstRender = workflow.indexOf('render - <<');
+  const firstRender = workflow.search(/render [^\n]*- <</);
   const outputChoice = workflow.indexOf('Keep the default output');
   assert.ok(outputChoice >= 0 && outputChoice < firstRender, 'output guidance precedes the first render example');
 

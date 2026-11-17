@@ -138,6 +138,8 @@ const SCOPE = [
 const ALLOWED = [
   /^(```|~~~)[\s\S]*?^\1/gm, // fenced code blocks
   /`[^`\n]+`/g, // inline code spans
+  // Local fork delta: the local output rules are written for the Chinese reader and are exempt.
+  /^## 本地规则[\s\S]*?(?=^## )/gm,
 ];
 
 // JavaScript lines whose Chinese or Japanese is legitimate: input the code reads or text the page shows,
