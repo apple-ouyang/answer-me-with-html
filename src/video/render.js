@@ -26,8 +26,7 @@ export async function renderVideo(source, { provider = null, cacheDir, defaults 
   const meta = picked.theme === AUTO ? { ...picked, theme: pickTheme({ scope: 'video' }) } : picked;
 
   const language = resolveLanguage({ declared: meta.lang, previous: previousLanguage, text: source });
-  // Each narration line is one beat; consecutive lines do not count as an "overlong paragraph".
-  const warnings = meta.style === 'off' ? [] : lintDoc(video.doc, language).filter((w) => w.rule !== 'paragraph-length');
+  const warnings = meta.style === 'off' ? [] : lintDoc(video.doc, language);
   if (meta.style === 'strict' && warnings.length) throw new LintError(warnings);
 
   const beats = allBeats(video);

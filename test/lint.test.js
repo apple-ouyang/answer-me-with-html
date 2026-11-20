@@ -17,25 +17,13 @@ test('sentenceLength: Chinese counts characters (an English word counts 1), Engl
   assert.deepEqual(sentenceLength('Close the valve now.'), { lang: 'en', count: 4 });
 });
 
-test('a long Chinese descriptive sentence (>45 characters) reports sentence-length with the line number', () => {
-  const long = '这'.repeat(46) + '。';
-  const ws = lint(`## A\n第一行。\n${long}`);
-  assert.deepEqual(rules(ws), ['sentence-length']);
-  assert.equal(ws[0].line, 3);
-});
-
-test('ordered lists count as procedural, with a stricter limit (35 Chinese characters / 20 English words)', () => {
-  const zh = '步'.repeat(36);
-  assert.deepEqual(rules(lint(`## A\n1. ${zh}`)), ['sentence-length']);
-  assert.deepEqual(rules(lint(`## A\n- ${zh}`)), [], 'unordered lists use the descriptive 45-character limit');
-  const en = Array.from({ length: 21 }, () => 'go').join(' ');
-  assert.deepEqual(rules(lint(`## A\n1. ${en}.`)), ['sentence-length']);
-});
-
-test('a paragraph over 6 sentences reports paragraph-length', () => {
-  const ws = lint(`## A\n一。二。三。\n四。五。六。七。`);
-  assert.deepEqual(rules(ws), ['paragraph-length']);
-  assert.equal(ws[0].line, 2);
+test('long sentences, long procedural steps, and multi-sentence paragraphs are not flagged', () => {
+  const longZh = '这'.repeat(80) + '。';
+  assert.deepEqual(lint(`## A\n第一行。\n${longZh}`), []);
+  assert.deepEqual(lint(`## A\n1. ${'步'.repeat(60)}`), []);
+  const longEn = Array.from({ length: 40 }, () => 'go').join(' ');
+  assert.deepEqual(lint(`## A\n1. ${longEn}.`), []);
+  assert.deepEqual(lint(`## A\n一。二。三。\n四。五。六。七。八。`), []);
 });
 
 test('banned English words get a replacement, case-insensitive, multi-word phrases match', () => {
@@ -60,7 +48,7 @@ test('Chinese light verbs: `进行优化` → `优化`; `进行中` is not flagg
 test('Chinese chained `的` and clichés', () => {
   assert.deepEqual(rules(lint('## A\n我的朋友的同事的电脑坏了。')), ['de-chain']);
   assert.deepEqual(rules(lint('## A\n基本的には具体的で効果的な手順を選ぶ。')), []);
-  assert.deepEqual(rules(lint('## A\nこの文はとても長くて、四十五文字をこえるようにわざと言葉をたくさん足して書いた説明の文章になっている。')), ['sentence-length'], 'Japanese is still checked for sentence length');
+  assert.deepEqual(rules(lint('## A\nこの文はとても長くて、四十五文字をこえるようにわざと言葉をたくさん足して書いた説明の文章になっている。')), [], 'Japanese gets no length or Chinese lexical warnings');
   assert.deepEqual(rules(lint('## A\n这一步至关重要。')), ['cliche']);
 });
 
@@ -147,18 +135,6 @@ test('messages: English word rule quotes the flagged word and names the replacem
 test('messages: Chinese light verb quotes the span and the Chinese replacement', () => {
   const [w] = lint('## A\n我们对接口进行优化。');
   assert.equal(formatWarning(w), 'L2 [word] light verb "进行优化" (进行) → use "优化"');
-});
-
-test('messages: sentence length names the unit, the limit and a preview', () => {
-  const [zh] = lint(`## A\n${'这'.repeat(46)}。`);
-  assert.equal(zh.message, `sentence has 46 characters (max 45): "${'这'.repeat(24)}…"`);
-  const [en] = lint(`## A\n1. ${Array.from({ length: 21 }, () => 'go').join(' ')}.`);
-  assert.equal(en.message, 'step has 21 words (max 20): "go go go go go go go go …"');
-});
-
-test('messages: paragraph length names the count and the limit', () => {
-  const [w] = lint('## A\n一。二。三。\n四。五。六。七。');
-  assert.equal(w.message, 'paragraph has 7 sentences (max 6)');
 });
 
 test('messages: passive voice quotes the verb phrase', () => {

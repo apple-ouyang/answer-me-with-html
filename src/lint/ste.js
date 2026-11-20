@@ -1,20 +1,17 @@
 // STE controlled-writing check (only constrains the explanatory text in drafts).
-// The goal is text with no filler; ASD-STE100 is the idea behind it, not a standard to copy.
-// Rules: sentence length, paragraph length, non-approved words (English and Chinese), English passive voice in steps, Chinese light verbs / `的` chains / clichés and filler. All are warnings; strictness comes from style.
-// Japanese with kana gets only the sentence and paragraph length checks: Japanese `的` is a suffix (`基本的`, `具体的`), not the Chinese structural particle.
-// A language other than Chinese, English and Japanese gets only the language-neutral rules: sentence length (in words, or in characters for CJK text) and paragraph length.
+// The goal is clear text with no filler; ASD-STE100 is the idea behind it, not a rigid length cap.
+// Rules: non-approved words (English and Chinese), English passive voice in steps, Chinese light verbs / `的` chains / clichés and filler. Sentence and paragraph length are unrestricted so explanations can expand when needed. All findings are warnings; strictness comes from style.
+// Japanese with kana and languages other than Chinese and English get no English or Chinese vocabulary warnings: Japanese `的` is a suffix (`基本的`, `具体的`), not the Chinese structural particle.
 // Image captions (the alt text) are checked like any other text.
 // Skipped: code and inline code, quotations, math ($…$ and $$ blocks), ~~strikethrough~~ (counter-examples), table rows with a no status, headings, components other than callout.
 // A quotation is someone else's words: a draft that quotes a reviewer, a log line or a spec does not have to rewrite it.
 
 import { EN_WORDS } from './wordlist.en.js';
 import { ZH_LIGHT_VERBS, ZH_CLICHES, ZH_WORDS } from './wordlist.zh.js';
-import { isCJK, isJapanese, countWords } from '../svg/text.js';
+import { isCJK, isJapanese } from '../svg/text.js';
 import { COMPONENTS } from '../components/index.js';
 import { stripMath, opensDisplay, closesDisplay, isDisplayLine } from '../math.js';
 
-const LIMITS = { zh: { procedural: 35, descriptive: 45 }, en: { procedural: 20, descriptive: 25 } };
-const MAX_SENTENCES = 6;
 const ABBR = /\b(e\.g|i\.e|etc|vs|cf|approx|Fig|No)\./gi;
 const PASSIVE = /\b(?:am|is|are|was|were|be|been|being)\s+(?:\w+ly\s+)?(\w+ed|known|done|made|given|taken|seen|written|built|shown|sent|kept|held|found|set|put|run|begun|chosen|driven|broken)\b/i;
 const EN_RE = Object.entries(EN_WORDS)
@@ -33,18 +30,8 @@ export function sentenceLength(sentence) {
   return cjk >= 4 || cjk > words ? { lang: 'zh', count: cjk + words } : { lang: 'en', count: words };
 }
 
-// Sentence length in a language without rules of its own: characters for CJK text (as sentenceLength does), words for everything else.
-// The words come from countWords() in src/svg/text.js, which the video duration estimate uses too.
-const CJK_TEXT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu;
-function neutralLength(sentence) {
-  const han = sentence.match(CJK_TEXT)?.length ?? 0;
-  const rest = sentence.replace(CJK_TEXT, ' ');
-  const words = countWords(rest);
-  return han >= 4 || han > words ? { lang: 'zh', count: han + words } : { lang: 'en', count: words };
-}
-
 // The rule family of a draft. Chinese, English and Japanese drafts follow their text, as they always did ('auto'); a declared language
-// selects its own family; any other language, declared or detected, gets the neutral rules. No language given (a direct call) is 'auto'.
+// selects its own family; any other language, declared or detected, gets 'neutral' (no language-specific lexical warnings). No language given is 'auto'.
 const RULE_LANGUAGES = new Set(['zh', 'en', 'ja']);
 function ruleFamily(language) {
   if (!language) return 'auto';
@@ -84,13 +71,6 @@ function clean(text) {
 }
 
 function lintMarkdown(text, startLine, out, family) {
-  let para = null;
-  const flush = () => {
-    if (para && para.count > MAX_SENTENCES) {
-      out.push({ line: para.line, rule: 'paragraph-length', message: `paragraph has ${para.count} sentences (max ${MAX_SENTENCES})` });
-    }
-    para = null;
-  };
   let inHtml = false;
   let inMath = false;
   text.split('\n').forEach((raw, i) => {
@@ -99,20 +79,19 @@ function lintMarkdown(text, startLine, out, family) {
     if (/^<(div|svg|table|details|figure)/i.test(t)) inHtml = true;
     if (inHtml) {
       if (/<\/(div|svg|table|details|figure)>\s*$/i.test(t)) inHtml = false;
-      return flush();
+      return;
     }
     // The TeX of a $$ block is not text: it gives no words and no sentences.
     if (inMath) {
       if (!t || closesDisplay(t)) inMath = false;
-      return flush();
+      return;
     }
     if (opensDisplay(raw) || isDisplayLine(raw)) {
       inMath = opensDisplay(raw);
-      return flush();
+      return;
     }
-    if (!t || /^#{1,6}\s/.test(t) || /^[-*_]{3,}$/.test(t)) return flush();
+    if (!t || /^#{1,6}\s/.test(t) || /^[-*_]{3,}$/.test(t)) return;
     if (t.startsWith('|')) {
-      flush();
       if (/^\|?[\s:|-]+\|?$/.test(t)) return;
       const cells = t.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
       if (cells.some((c) => /^(no|✗|✘)(\s|$)/.test(c))) return;
@@ -121,16 +100,12 @@ function lintMarkdown(text, startLine, out, family) {
     }
     const list = t.match(/^(?:([-*+])|(\d+)[.)])\s+(.*)$/);
     if (list) {
-      flush();
       checkUnit(clean(list[3]), line, list[2] ? 'procedural' : 'descriptive', out, family);
       return;
     }
     const body = clean(t.replace(/^>\s*/, ''));
-    const n = checkUnit(body, line, 'descriptive', out, family);
-    if (!para) para = { line, count: 0 };
-    para.count += n;
+    checkUnit(body, line, 'descriptive', out, family);
   });
-  flush();
 }
 
 // Check one piece of text (a list item / cell / one paragraph line); returns the sentence count.
@@ -141,13 +116,7 @@ function checkUnit(text, line, kind, out, family) {
   const chineseRules = zhFamily && !ja;
   const englishRules = family !== 'neutral';
   for (const s of sentences) {
-    const { lang, count } = family === 'neutral' ? neutralLength(s) : sentenceLength(s);
-    const limit = LIMITS[lang][kind];
-    if (count > limit) {
-      const unit = lang === 'zh' ? 'characters' : 'words';
-      const preview = s.length > 24 ? `${s.slice(0, 24)}…` : s;
-      out.push({ line, rule: 'sentence-length', message: `${kind === 'procedural' ? 'step' : 'sentence'} has ${count} ${unit} (max ${limit}): "${preview}"` });
-    }
+    const { lang } = sentenceLength(s);
     // ASD-STE100 allows the passive in descriptions, so only steps are checked.
     if (englishRules && kind === 'procedural' && lang === 'en' && PASSIVE.test(s)) {
       out.push({ line, rule: 'passive', message: `possible passive voice: "${s.match(PASSIVE)[0]}"`, suggestion: 'use active voice' });

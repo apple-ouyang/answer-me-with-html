@@ -1,6 +1,5 @@
-// The writing check follows the language of the draft (#84). Chinese and English keep their rules. A declared language selects the
-// rule family: declared English turns the Chinese vocabulary rules off. Any other language gets only the language-neutral rules:
-// sentence length (in words, or in characters for Chinese and Japanese text) and paragraph length. Tested through the render result.
+// The writing check follows the language of the draft (#84). Chinese and English keep their lexical rules. A declared language selects
+// the rule family: declared English turns the Chinese vocabulary rules off. Sentence and paragraph length are unrestricted across all languages.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderDoc } from '../src/render.js';
@@ -15,56 +14,19 @@ test('writing check: English rules still flag passive steps and wordy words in a
   assert.ok(rules(warn(undefined, '1. The valve was closed by the operator and the line stays open for now.')).includes('passive'));
 });
 
-test('writing check: a language without rules gets no English passive-voice or word-list warnings', () => {
-  for (const lang of ['fr', 'es', 'ko', 'pt-BR']) {
-    const w = warn(lang, '1. The valve was closed by the operator. Please utilize the valve.');
-    assert.deepEqual(rules(w).filter((r) => r === 'passive' || r === 'word'), [], lang);
+test('writing check: a language without rules gets no English passive-voice, word-list or length warnings', () => {
+  for (const lang of ['fr', 'es', 'ko', 'pt-BR', 'th', 'lo', 'km', 'my']) {
+    const w = warn(lang, `1. The valve was closed by the operator. Please utilize the valve. ${words(40)}.`);
+    assert.deepEqual(rules(w), [], lang);
   }
 });
 
-test('writing check: a language without rules still gets the sentence-length rule, in words', () => {
-  const long = warn('fr', `${words(30)}.`);
-  assert.deepEqual(rules(long), ['sentence-length']);
-  assert.match(long[0].message, /30 words \(max 25\)/);
-  assert.deepEqual(warn('fr', `${words(20)}.`), []);
-  const step = warn('fr', `1. ${words(22)}.`);
-  assert.match(step[0].message, /step has 22 words \(max 20\)/);
-});
-
-test('writing check: Korean is measured in space-separated words, not in syllables', () => {
-  assert.deepEqual(warn('ko', '이것은 한국어로 쓴 짧은 설명입니다.'), []); // lang-ok: draft text under test
-  assert.deepEqual(rules(warn('ko', `${words(30, '단어')}입니다.`)), ['sentence-length']); // lang-ok: draft text under test
-});
-
-test('writing check: Thai is measured in words found by word segmentation', () => {
-  assert.deepEqual(warn('th', 'ฉันกินข้าวที่บ้าน'), []); // lang-ok: draft text under test
-  const long = warn('th', 'ฉันกินข้าว'.repeat(10)); // lang-ok: draft text under test
-  assert.deepEqual(rules(long), ['sentence-length']);
-  assert.match(long[0].message, /words/);
-});
-
-test('writing check: Lao, Khmer and Myanmar are measured like Thai, in words found by word segmentation', () => {
-  const samples = { th: 'ฉันกินข้าว', lo: 'ກວດສອບການເຊື່ອມຕໍ່', km: 'ពិនិត្យការតភ្ជាប់', my: 'ဒေတာဘေ့စ်ချိတ်ဆက်မှု' }; // lang-ok: draft text under test
-  const countOf = (w) => Number(w[0].message.match(/(\d+) words/)[1]);
-  for (const [lang, word] of Object.entries(samples)) {
-    assert.deepEqual(warn(lang, word), [], `${lang}: a short sentence stays quiet`); // lang-ok: draft text under test
-    const long = warn(lang, word.repeat(10)); // lang-ok: draft text under test
-    assert.deepEqual(rules(long), ['sentence-length'], lang);
-    assert.match(long[0].message, /max 25/, lang);
-  }
-  // Ten repeats: 30 words in the three scripts whose dictionaries split them like Thai, 60 in Myanmar.
-  const counts = ['th', 'lo', 'km', 'my'].map((lang) => countOf(warn(lang, samples[lang].repeat(10)))); // lang-ok: draft text under test
-  assert.deepEqual(counts, [30, 30, 30, 60]);
-});
-
-test('writing check: a language without rules still gets the paragraph-length rule', () => {
-  const seven = Array.from({ length: 7 }, (_, i) => `Phrase ${i}.`).join(' ');
-  assert.deepEqual(rules(warn('fr', seven)), ['paragraph-length']);
-});
-
-test('writing check: an undeclared draft in another script uses the language-neutral rules too', () => {
-  assert.deepEqual(warn(undefined, 'Это короткое описание на русском языке.'), []);
-  assert.deepEqual(rules(warn(undefined, `${words(30, 'слово')}.`)), ['sentence-length']);
+test('writing check: long paragraphs and long CJK or Cyrillic sentences are not flagged for length', () => {
+  const seven = Array.from({ length: 8 }, (_, i) => `Phrase ${i}.`).join(' ');
+  assert.deepEqual(rules(warn('fr', seven)), []);
+  assert.deepEqual(rules(warn(undefined, `${words(30, 'слово')}.`)), []);
+  const longZhHant = '這個句子用來測試繁體中文在取消句長硬上限之後不再誤報長度警告，讓複雜推導和機制解釋能夠完整展開。'; // lang-ok: draft text under test
+  assert.deepEqual(rules(warn('zh-Hant', longZhHant)), []);
 });
 
 test('writing check: a declared English draft does not get Chinese vocabulary warnings; an undeclared Chinese one does', () => {
@@ -74,14 +36,6 @@ test('writing check: a declared English draft does not get Chinese vocabulary wa
   assert.ok(warn('zh', body).some((w) => /light verb/.test(w.message)));
 });
 
-test('writing check: Traditional Chinese uses the Chinese length limits', () => {
-  const long = '這個句子用來測試繁體中文的長度限制，它一定超過四十五個字，所以系統應該把它標記出來，提醒作者拆成兩句話再寫。'; // lang-ok: draft text under test
-  const w = warn('zh-Hant', long);
-  assert.deepEqual(rules(w), ['sentence-length']);
-  assert.match(w[0].message, /characters/);
-  assert.deepEqual(warn('zh-Hant', '這是一個簡短的句子。'), []); // lang-ok: draft text under test
-});
-
-test('writing check: Japanese keeps only the length rules', () => {
-  assert.deepEqual(warn('ja', '基本的には具体的で効果的な手順を説明します。'), []); // lang-ok: draft text under test
+test('writing check: Japanese gets no Chinese vocabulary or length warnings', () => {
+  assert.deepEqual(warn('ja', '基本的には具体的で効果的な手順を長く丁寧に説明します。'), []); // lang-ok: draft text under test
 });
