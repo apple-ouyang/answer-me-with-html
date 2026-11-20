@@ -153,8 +153,7 @@ test('image: readEmbeddedImages reads back what a page embeds, keyed by the draf
 });
 
 test('image: the caption goes through the STE check', () => {
-  const long = 'This screenshot shows the login screen of the game with the three viewing modes and every button that the player can press during a match, including the menu, the chat box and the score board';
-  assert.ok(lintDoc(parseDoc(draft(`![${long}](/a.png)`))).some((w) => w.rule === 'sentence-length'));
+  assert.ok(lintDoc(parseDoc(draft('![Utilize the login screen](/a.png)'))).some((w) => w.rule === 'word'));
 });
 
 function sink() {

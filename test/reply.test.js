@@ -107,7 +107,7 @@ test('ask: the STE check skips the text inside a preview', () => {
   const long = 'Which of the two caches that the team looked at during the review last week do we utilize for the session store and the job queue in production and in staging?';
   const preview = 'This preview sentence also utilizes a very long sentence that the reader sees inside the drawing, not as prose on the page.';
   const warnings = lintDoc(parseDoc(draft('```ask', `${long}\n* Redis\n  :::html\n  <p>${preview}</p>\n  :::\n- Memcached`)));
-  assert.ok(warnings.some((w) => w.line === 7 && w.rule === 'sentence-length'));
+  assert.ok(warnings.some((w) => w.line === 7 && w.rule === 'word'));
   assert.ok(!warnings.some((w) => w.line === 10), 'the preview text is not checked as page prose');
 });
 
@@ -153,11 +153,12 @@ test('ask: a video cannot take answers', async () => {
   await assert.rejects(renderVideo(src), (err) => err instanceof RenderError && /page only/.test(err.message));
 });
 
-test('ask: the STE check reads the question and the options', () => {
+test('ask: the STE check reads the question and the options without length caps', () => {
   const long = 'Which of the two caches that the team looked at during the review last week do we utilize for the session store and the job queue in production and in staging?';
-  const warnings = lintDoc(parseDoc(draft('```ask', `${long}\n* Redis\n- Memcached`)));
-  assert.ok(warnings.some((w) => w.line === 7 && w.rule === 'sentence-length'));
+  const warnings = lintDoc(parseDoc(draft('```ask', `${long}\n* Redis prior to rollout\n- Memcached`)));
+  assert.ok(!warnings.some((w) => w.rule === 'sentence-length'));
   assert.ok(warnings.some((w) => w.line === 7 && /utilize/.test(w.message)));
+  assert.ok(warnings.some((w) => w.line === 8 && /prior to/.test(w.message)));
 });
 
 test('reply: every page has a Reply button that carries its labels', () => {

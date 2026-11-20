@@ -10477,8 +10477,6 @@ var ZH_WORDS = Object.freeze([
 ]);
 
 // src/lint/ste.js
-var LIMITS = { zh: { procedural: 35, descriptive: 45 }, en: { procedural: 20, descriptive: 25 } };
-var MAX_SENTENCES = 6;
 var ABBR = /\b(e\.g|i\.e|etc|vs|cf|approx|Fig|No)\./gi;
 var PASSIVE = /\b(?:am|is|are|was|were|be|been|being)\s+(?:\w+ly\s+)?(\w+ed|known|done|made|given|taken|seen|written|built|shown|sent|kept|held|found|set|put|run|begun|chosen|driven|broken)\b/i;
 var EN_RE = Object.entries(EN_WORDS3).sort((a3, b) => b[0].length - a3[0].length).map(([word, suggestion]) => ({ re: new RegExp(`\\b${word.replace(/ /g, "\\s+")}\\b`, "gi"), word, suggestion }));
@@ -10491,13 +10489,6 @@ function sentenceLength(sentence) {
   const cjk = [...sentence].filter(isCJK).filter((c2) => !/[，。！？；：、（）「」『』“”‘’《》]/.test(c2)).length;
   const words3 = sentence.match(/[A-Za-z0-9][\w'’-]*/g)?.length ?? 0;
   return cjk >= 4 || cjk > words3 ? { lang: "zh", count: cjk + words3 } : { lang: "en", count: words3 };
-}
-var CJK_TEXT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu;
-function neutralLength(sentence) {
-  const han = sentence.match(CJK_TEXT)?.length ?? 0;
-  const rest = sentence.replace(CJK_TEXT, " ");
-  const words3 = countWords(rest);
-  return han >= 4 || han > words3 ? { lang: "zh", count: han + words3 } : { lang: "en", count: words3 };
 }
 var RULE_LANGUAGES = /* @__PURE__ */ new Set(["zh", "en", "ja"]);
 function ruleFamily(language) {
@@ -10525,13 +10516,6 @@ function clean(text2) {
   return stripMath(text2.replace(/~~[^~]*~~/g, "").replace(/`[^`]*`/g, "").replace(QUOTED, "")).replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/<[^>]+>/g, "").replace(/[*_]{1,3}/g, "");
 }
 function lintMarkdown(text2, startLine, out, family) {
-  let para = null;
-  const flush = () => {
-    if (para && para.count > MAX_SENTENCES) {
-      out.push({ line: para.line, rule: "paragraph-length", message: `paragraph has ${para.count} sentences (max ${MAX_SENTENCES})` });
-    }
-    para = null;
-  };
   let inHtml = false;
   let inMath = false;
   text2.split("\n").forEach((raw, i) => {
@@ -10540,19 +10524,18 @@ function lintMarkdown(text2, startLine, out, family) {
     if (/^<(div|svg|table|details|figure)/i.test(t)) inHtml = true;
     if (inHtml) {
       if (/<\/(div|svg|table|details|figure)>\s*$/i.test(t)) inHtml = false;
-      return flush();
+      return;
     }
     if (inMath) {
       if (!t || closesDisplay(t)) inMath = false;
-      return flush();
+      return;
     }
     if (opensDisplay(raw) || isDisplayLine(raw)) {
       inMath = opensDisplay(raw);
-      return flush();
+      return;
     }
-    if (!t || /^#{1,6}\s/.test(t) || /^[-*_]{3,}$/.test(t)) return flush();
+    if (!t || /^#{1,6}\s/.test(t) || /^[-*_]{3,}$/.test(t)) return;
     if (t.startsWith("|")) {
-      flush();
       if (/^\|?[\s:|-]+\|?$/.test(t)) return;
       const cells = t.replace(/^\||\|$/g, "").split("|").map((c2) => c2.trim());
       if (cells.some((c2) => /^(no|✗|✘)(\s|$)/.test(c2))) return;
@@ -10561,16 +10544,12 @@ function lintMarkdown(text2, startLine, out, family) {
     }
     const list2 = t.match(/^(?:([-*+])|(\d+)[.)])\s+(.*)$/);
     if (list2) {
-      flush();
       checkUnit(clean(list2[3]), line, list2[2] ? "procedural" : "descriptive", out, family);
       return;
     }
     const body = clean(t.replace(/^>\s*/, ""));
-    const n = checkUnit(body, line, "descriptive", out, family);
-    if (!para) para = { line, count: 0 };
-    para.count += n;
+    checkUnit(body, line, "descriptive", out, family);
   });
-  flush();
 }
 function checkUnit(text2, line, kind2, out, family) {
   const sentences = splitSentences(text2);
@@ -10579,13 +10558,7 @@ function checkUnit(text2, line, kind2, out, family) {
   const chineseRules = zhFamily && !ja;
   const englishRules = family !== "neutral";
   for (const s of sentences) {
-    const { lang, count: count2 } = family === "neutral" ? neutralLength(s) : sentenceLength(s);
-    const limit = LIMITS[lang][kind2];
-    if (count2 > limit) {
-      const unit = lang === "zh" ? "characters" : "words";
-      const preview2 = s.length > 24 ? `${s.slice(0, 24)}\u2026` : s;
-      out.push({ line, rule: "sentence-length", message: `${kind2 === "procedural" ? "step" : "sentence"} has ${count2} ${unit} (max ${limit}): "${preview2}"` });
-    }
+    const { lang } = sentenceLength(s);
     if (englishRules && kind2 === "procedural" && lang === "en" && PASSIVE.test(s)) {
       out.push({ line, rule: "passive", message: `possible passive voice: "${s.match(PASSIVE)[0]}"`, suggestion: "use active voice" });
     }
@@ -12988,7 +12961,7 @@ async function renderVideo(source, { provider = null, cacheDir, defaults: defaul
   if (problem) throw new ParseError(problem, 0);
   const meta = picked.theme === AUTO ? { ...picked, theme: pickTheme({ scope: "video" }) } : picked;
   const language = resolveLanguage({ declared: meta.lang, previous: previousLanguage, text: source });
-  const warnings = meta.style === "off" ? [] : lintDoc(video.doc, language).filter((w2) => w2.rule !== "paragraph-length");
+  const warnings = meta.style === "off" ? [] : lintDoc(video.doc, language);
   if (meta.style === "strict" && warnings.length) throw new LintError(warnings);
   const beats = allBeats(video);
   const languageOf = (text2) => language.declared ? language.tag : detectLang(text2);
