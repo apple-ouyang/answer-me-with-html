@@ -2,6 +2,8 @@
 name: answer-me-with-html
 argument-hint: "[config [key value] | clean | update]"
 description: >-
+  用单页可视化 HTML 解释复杂问题：流程架构、方案对比权衡、排查诊断、多维表格、步骤分支或超过一屏的审核/决策清单。
+  用户说“没看懂”“讲细点”“画个图”“讲讲原理”“做个 HTML/页面”“一页看懂”“可视化”，或任何用一页图文比纯文本更清晰的回答时主动使用。
   Turns an answer into a one-page visual HTML explainer: the model writes a short Markdown draft and
   the bundled CLI builds one page. Use it proactively and liberally in replies to the user, without being asked, whenever a
   page would help the reader more than plain text, even if plain text would also work: any explanation
